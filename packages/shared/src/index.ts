@@ -1,3 +1,4 @@
 // Export all types and utilities
-export * from './types/index.js';
-export * from './utils/calculations.js';
+export * from './types/index';
+export * from './utils/calculations';
+export * from './utils/validation';

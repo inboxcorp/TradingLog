@@ -1,13 +1,20 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { formatCurrency } from '@trading-log/shared';
+import { formatCurrency, Trade } from '@trading-log/shared';
 import { tradeApi } from '../lib/api';
+import { CloseTradeModal } from './CloseTradeModal';
+import { AdjustStopModal } from './AdjustStopModal';
 
 interface TradeListProps {
   statusFilter?: 'ACTIVE' | 'CLOSED' | 'ALL';
 }
 
 export const TradeList: React.FC<TradeListProps> = ({ statusFilter = 'ALL' }) => {
+  const [tradeToClose, setTradeToClose] = useState<Trade | null>(null);
+  const [isCloseModalOpen, setIsCloseModalOpen] = useState(false);
+  const [tradeToAdjust, setTradeToAdjust] = useState<Trade | null>(null);
+  const [isAdjustModalOpen, setIsAdjustModalOpen] = useState(false);
+
   const {
     data: trades = [],
     isLoading,
@@ -16,6 +23,31 @@ export const TradeList: React.FC<TradeListProps> = ({ statusFilter = 'ALL' }) =>
     queryKey: ['trades', statusFilter],
     queryFn: () => tradeApi.getTrades(statusFilter),
   });
+
+  const handleCloseTrade = (trade: Trade) => {
+    setTradeToClose(trade);
+    setIsCloseModalOpen(true);
+  };
+
+  const handleCloseModalClose = () => {
+    setIsCloseModalOpen(false);
+    setTradeToClose(null);
+  };
+
+  const handleAdjustStop = (trade: Trade) => {
+    setTradeToAdjust(trade);
+    setIsAdjustModalOpen(true);
+  };
+
+  const handleAdjustModalClose = () => {
+    setIsAdjustModalOpen(false);
+    setTradeToAdjust(null);
+  };
+
+  const handleAdjustSuccess = (updatedTrade: Trade) => {
+    // Modal will close automatically via handleAdjustModalClose
+    // QueryClient will invalidate and refetch trades automatically
+  };
 
   if (isLoading) {
     return (
@@ -150,11 +182,17 @@ export const TradeList: React.FC<TradeListProps> = ({ statusFilter = 'ALL' }) =>
               <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                 Entry Date
               </th>
+              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                P/L
+              </th>
+              <th className="px-6 py-4 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {trades.map((trade) => (
-              <tr key={trade.id} className="hover:bg-blue-50 hover:border-blue-200 transition-colors duration-150 cursor-pointer">
+              <tr key={trade.id} className="hover:bg-blue-50 hover:border-blue-200 transition-colors duration-150">
                 <td className="px-6 py-5 whitespace-nowrap">
                   <span className="text-base font-bold text-gray-900">{trade.symbol}</span>
                 </td>
@@ -175,6 +213,37 @@ export const TradeList: React.FC<TradeListProps> = ({ statusFilter = 'ALL' }) =>
                 </td>
                 <td className="px-6 py-5 whitespace-nowrap">
                   <span className="text-sm text-gray-600">{formatDate(trade.entryDate)}</span>
+                </td>
+                <td className="px-6 py-5 whitespace-nowrap">
+                  {trade.realizedPnL !== null && trade.realizedPnL !== undefined ? (
+                    <span className={`text-sm font-bold ${
+                      trade.realizedPnL >= 0 ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      {trade.realizedPnL >= 0 ? '+' : ''}{formatCurrency(trade.realizedPnL)}
+                    </span>
+                  ) : (
+                    <span className="text-sm text-gray-400">-</span>
+                  )}
+                </td>
+                <td className="px-6 py-5 whitespace-nowrap text-right">
+                  {trade.status === 'ACTIVE' ? (
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => handleAdjustStop(trade)}
+                        className="bg-blue-600 text-white px-3 py-1 rounded-md text-sm font-medium hover:bg-blue-700 transition-colors"
+                      >
+                        Adjust Stop
+                      </button>
+                      <button
+                        onClick={() => handleCloseTrade(trade)}
+                        className="bg-red-600 text-white px-3 py-1 rounded-md text-sm font-medium hover:bg-red-700 transition-colors"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="text-sm text-gray-400">-</span>
+                  )}
                 </td>
               </tr>
             ))}
@@ -209,6 +278,16 @@ export const TradeList: React.FC<TradeListProps> = ({ statusFilter = 'ALL' }) =>
                 <span className="text-sm font-medium text-gray-600">Risk Amount</span>
                 <span className="text-base font-semibold text-red-600">{formatCurrency(trade.riskAmount)}</span>
               </div>
+              {trade.realizedPnL !== null && trade.realizedPnL !== undefined && (
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium text-gray-600">Realized P/L</span>
+                  <span className={`text-lg font-bold ${
+                    trade.realizedPnL >= 0 ? 'text-green-600' : 'text-red-600'
+                  }`}>
+                    {trade.realizedPnL >= 0 ? '+' : ''}{formatCurrency(trade.realizedPnL)}
+                  </span>
+                </div>
+              )}
             </div>
             
             {/* Date and Notes */}
@@ -221,10 +300,47 @@ export const TradeList: React.FC<TradeListProps> = ({ statusFilter = 'ALL' }) =>
                   <p className="text-sm text-gray-600 italic">"{trade.notes}"</p>
                 </div>
               )}
+              
+              {/* Actions */}
+              {trade.status === 'ACTIVE' && (
+                <div className="mt-4 pt-3 border-t border-gray-100 space-y-2">
+                  <button
+                    onClick={() => handleAdjustStop(trade)}
+                    className="w-full bg-blue-600 text-white py-2 px-4 rounded-md text-sm font-medium hover:bg-blue-700 transition-colors"
+                  >
+                    Adjust Stop-Loss
+                  </button>
+                  <button
+                    onClick={() => handleCloseTrade(trade)}
+                    className="w-full bg-red-600 text-white py-2 px-4 rounded-md text-sm font-medium hover:bg-red-700 transition-colors"
+                  >
+                    Close Trade
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         ))}
       </div>
+
+      {/* Close Trade Modal */}
+      {tradeToClose && (
+        <CloseTradeModal
+          trade={tradeToClose}
+          isOpen={isCloseModalOpen}
+          onClose={handleCloseModalClose}
+        />
+      )}
+
+      {/* Adjust Stop Modal */}
+      {tradeToAdjust && (
+        <AdjustStopModal
+          trade={tradeToAdjust}
+          isOpen={isAdjustModalOpen}
+          onClose={handleAdjustModalClose}
+          onSuccess={handleAdjustSuccess}
+        />
+      )}
     </div>
   );
 };

@@ -4,9 +4,12 @@ import {
   UpdateUserEquityRequest, 
   UserResponse, 
   Trade, 
-  CreateTradeRequest, 
+  CreateTradeRequest,
+  CloseTradeRequest, 
   TradeResponse, 
-  TradesResponse 
+  TradesResponse,
+  PortfolioRisk,
+  PortfolioRiskResponse
 } from '@trading-log/shared';
 import { supabase } from './supabase';
 import { API_CONFIG, ERROR_MESSAGES } from '../config/constants';
@@ -95,6 +98,17 @@ export const userApi = {
     }
     throw new Error(response.data.error || 'Failed to update equity');
   },
+
+  /**
+   * Get portfolio risk calculation
+   */
+  getPortfolioRisk: async (): Promise<PortfolioRiskResponse> => {
+    const response = await apiClient.get<PortfolioRiskResponse>('/user/portfolio-risk');
+    if (response.data.success) {
+      return response.data;
+    }
+    throw new Error(response.data.error || 'Failed to fetch portfolio risk');
+  },
 };
 
 export const tradeApi = {
@@ -119,6 +133,30 @@ export const tradeApi = {
       return response.data.data;
     }
     throw new Error(response.data.error || 'Failed to create trade');
+  },
+
+  /**
+   * Close an active trade
+   */
+  closeTrade: async (tradeId: string, exitPrice: number): Promise<Trade> => {
+    const request: CloseTradeRequest = { exitPrice };
+    const response = await apiClient.post<TradeResponse>(`/trades/${tradeId}/close`, request);
+    if (response.data.success && response.data.data) {
+      return response.data.data;
+    }
+    throw new Error(response.data.error || 'Failed to close trade');
+  },
+
+  /**
+   * Adjust stop-loss on an active trade
+   */
+  adjustStopLoss: async (tradeId: string, stopLoss: number): Promise<Trade> => {
+    const request = { stopLoss };
+    const response = await apiClient.patch<TradeResponse>(`/trades/${tradeId}`, request);
+    if (response.data.success && response.data.data) {
+      return response.data.data;
+    }
+    throw new Error(response.data.error || 'Failed to adjust stop-loss');
   },
 };
 
