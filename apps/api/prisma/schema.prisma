@@ -81,9 +81,12 @@ model EquitySnapshot {
   userId      String
   totalEquity Float
   timestamp   DateTime @default(now())
-  source      String   // 'TRADE_CLOSE' | 'MANUAL_UPDATE' | 'DAILY_SNAPSHOT'
+  source      String   // 'TRADE_CLOSE' | 'MANUAL_UPDATE' | 'DAILY_SNAPSHOT' | 'CASH_DEPOSIT' | 'CASH_WITHDRAWAL'
+  amount      Float?   // Amount of the adjustment (positive for deposits, negative for withdrawals, null for snapshots)
+  description String?  // User-provided description for manual adjustments
   
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   @@index([userId, timestamp])
+  @@index([userId, source])
 }

@@ -62,6 +62,7 @@ export interface Trade {
   exitDate: Date | null;
   realizedPnL: number | null;
   riskAmount: number;
+  riskPercentage: number;
   notes: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -100,6 +101,7 @@ export const TradeSchema = z.object({
   exitDate: z.date().nullable(),
   realizedPnL: z.number().nullable(),
   riskAmount: z.number().min(0),
+  riskPercentage: z.number().min(0),
   notes: z.string().nullable(),
   createdAt: z.date(),
   updatedAt: z.date(),
@@ -137,3 +139,65 @@ export type CreateTradeRequest = z.infer<typeof CreateTradeRequestSchema>;
 
 export type TradeResponse = ApiResponse<Trade>;
 export type TradesResponse = ApiResponse<Trade[]>;
+
+// EquitySnapshot Types
+export type EquitySnapshotSource = 'TRADE_CLOSE' | 'MANUAL_UPDATE' | 'DAILY_SNAPSHOT' | 'CASH_DEPOSIT' | 'CASH_WITHDRAWAL';
+export type CashAdjustmentType = 'DEPOSIT' | 'WITHDRAWAL';
+
+export interface EquitySnapshot {
+  id: string;
+  userId: string;
+  totalEquity: number;
+  timestamp: Date;
+  source: EquitySnapshotSource;
+  amount?: number | null;
+  description?: string | null;
+}
+
+// Cash Adjustment Types
+export const CashAdjustmentRequestSchema = z.object({
+  type: z.enum(['DEPOSIT', 'WITHDRAWAL']),
+  amount: z.number().positive(),
+  description: z.string().optional(),
+});
+
+export type CashAdjustmentRequest = z.infer<typeof CashAdjustmentRequestSchema>;
+export type CashAdjustmentResponse = ApiResponse<User>;
+
+// Cash History Types
+export interface CashHistoryEntry {
+  id: string;
+  timestamp: Date;
+  type: CashAdjustmentType | 'TRADE_PNL';
+  amount: number;
+  description?: string;
+  totalEquityAfter: number;
+}
+
+export type CashHistoryResponse = ApiResponse<CashHistoryEntry[]>;
+
+// Trade Close Request Schema
+export const CloseTradeRequestSchema = z.object({
+  exitPrice: z.number().positive(),
+});
+
+export type CloseTradeRequest = z.infer<typeof CloseTradeRequestSchema>;
+
+// Portfolio Risk Types
+export type RiskLevel = 'SAFE' | 'WARNING' | 'DANGER';
+
+export interface PortfolioRisk {
+  totalRiskAmount: number;
+  totalRiskPercentage: number;
+  exceedsLimit: boolean;
+  riskLevel: RiskLevel;
+  userEquity: number;
+  activeTrades: Array<{
+    id: string;
+    symbol: string;
+    riskAmount: number;
+    riskPercentage: number;
+  }>;
+}
+
+export type PortfolioRiskResponse = ApiResponse<PortfolioRisk>;

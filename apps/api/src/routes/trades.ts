@@ -282,7 +282,9 @@ router.post('/:tradeId/close', requireAuth, async (req: AuthRequest, res: Respon
           userId,
           totalEquity: newEquity,
           timestamp: new Date(),
-          source: 'TRADE_CLOSE'
+          source: 'TRADE_CLOSE',
+          amount: realizedPnL,
+          description: `Trade closed: ${trade.symbol} ${trade.direction} - P/L: ${realizedPnL >= 0 ? '+' : ''}${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(realizedPnL)}`
         }
       });
       

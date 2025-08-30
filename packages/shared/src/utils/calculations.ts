@@ -28,6 +28,55 @@ export const validateEquityValue = (equity: number): boolean => {
 };
 
 /**
+ * Validates cash adjustment amount
+ * @param amount Amount to validate
+ * @returns True if valid, false otherwise
+ */
+export const validateCashAdjustmentAmount = (amount: number): boolean => {
+  if (!Number.isFinite(amount) || amount <= 0) return false;
+  if (amount > 10000000) return false; // $10M max per transaction
+  return true;
+};
+
+/**
+ * Validates withdrawal doesn't result in negative equity
+ * @param currentEquity Current equity amount
+ * @param withdrawalAmount Amount to withdraw
+ * @returns True if withdrawal is allowed, false otherwise
+ */
+export const validateWithdrawal = (currentEquity: number, withdrawalAmount: number): boolean => {
+  const newEquity = new Decimal(currentEquity).minus(withdrawalAmount).toNumber();
+  return newEquity >= 0;
+};
+
+/**
+ * Processes cash adjustment and returns new equity
+ * @param currentEquity Current equity amount
+ * @param type Type of adjustment (DEPOSIT or WITHDRAWAL)
+ * @param amount Amount to adjust
+ * @returns New equity amount
+ * @throws Error if adjustment is invalid
+ */
+export const processCashAdjustment = (
+  currentEquity: number, 
+  type: 'DEPOSIT' | 'WITHDRAWAL', 
+  amount: number
+): number => {
+  if (!validateCashAdjustmentAmount(amount)) {
+    throw new Error('Invalid adjustment amount');
+  }
+
+  if (type === 'WITHDRAWAL') {
+    if (!validateWithdrawal(currentEquity, amount)) {
+      throw new Error('Insufficient funds for withdrawal');
+    }
+    return new Decimal(currentEquity).minus(amount).toNumber();
+  } else {
+    return new Decimal(currentEquity).plus(amount).toNumber();
+  }
+};
+
+/**
  * Formats currency values for display
  * @param value Numeric value to format
  * @param currency Currency code (default: USD)
@@ -119,5 +168,57 @@ export const calculateRealizedPnL = (
 ): number => {
   const priceDiff = new Decimal(exitPrice).minus(entryPrice);
   const multiplier = direction === 'LONG' ? 1 : -1;
-  return priceDiff.times(multiplier).times(size).toNumber();
+  const result = priceDiff.times(multiplier).times(size).toNumber();
+  // Convert -0 to 0 for consistency
+  return result === 0 ? 0 : result;
+};
+
+/**
+ * Calculate portfolio risk with detailed breakdown
+ * @param activeTrades Array of active trades
+ * @param userEquity User's current total equity
+ * @returns Complete portfolio risk analysis
+ */
+export const calculateDetailedPortfolioRisk = (
+  activeTrades: Array<{ id: string; symbol: string; riskAmount: number }>,
+  userEquity: number
+): {
+  totalRiskAmount: number;
+  totalRiskPercentage: number;
+  exceedsLimit: boolean;
+  riskLevel: 'SAFE' | 'WARNING' | 'DANGER';
+  activeTrades: Array<{
+    id: string;
+    symbol: string;
+    riskAmount: number;
+    riskPercentage: number;
+  }>;
+} => {
+  const totalRiskAmount = activeTrades.reduce((total, trade) => 
+    new Decimal(total).plus(trade.riskAmount).toNumber(), 0
+  );
+  
+  const totalRiskPercentage = new Decimal(totalRiskAmount)
+    .dividedBy(userEquity)
+    .times(100)
+    .toNumber();
+    
+  const riskLevel = totalRiskPercentage > 6 ? 'DANGER' : 
+                   totalRiskPercentage > 4.5 ? 'WARNING' : 'SAFE';
+    
+  return {
+    totalRiskAmount,
+    totalRiskPercentage,
+    exceedsLimit: totalRiskPercentage > 6,
+    riskLevel,
+    activeTrades: activeTrades.map(trade => ({
+      id: trade.id,
+      symbol: trade.symbol,
+      riskAmount: trade.riskAmount,
+      riskPercentage: new Decimal(trade.riskAmount)
+        .dividedBy(userEquity)
+        .times(100)
+        .toNumber()
+    }))
+  };
 };
