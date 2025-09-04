@@ -1,0 +1,75 @@
+// This is your Prisma schema file for PostgreSQL/Supabase
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  totalEquity Float
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  trades          Trade[]
+}
+
+model Trade {
+  id           String   @id @default(cuid())
+  userId       String
+  symbol       String   @db.VarChar(10)  // Limit symbol length
+  direction    String   @db.VarChar(5)   // 'LONG' | 'SHORT'
+  entryPrice   Float
+  positionSize Float
+  stopLoss     Float
+  exitPrice    Float?
+  status       String   @db.VarChar(10)  // 'ACTIVE' | 'CLOSED'
+  entryDate    DateTime
+  exitDate     DateTime?
+  realizedPnL  Float?
+  riskAmount   Float
+  notes        String?  @db.Text         // Allow longer notes
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  methodAnalysis MethodAnalysis[]
+  mindsetTags    MindsetTag[]
+  
+  // Indexes for performance
+  @@index([userId, status])
+  @@index([userId, createdAt])
+}
+
+model MethodAnalysis {
+  id         String   @id @default(cuid())
+  tradeId    String
+  timeframe  String   @db.VarChar(15)  // 'DAILY' | 'FOUR_HOUR' | 'ONE_HOUR'
+  indicator  String   @db.VarChar(50)
+  signal     String   @db.VarChar(50)
+  divergence String   @db.VarChar(10)  // 'BULLISH' | 'BEARISH' | 'NONE'
+  notes      String?  @db.Text
+  createdAt  DateTime @default(now())
+  
+  trade      Trade    @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  
+  @@index([tradeId])
+}
+
+model MindsetTag {
+  id        String   @id @default(cuid())
+  tradeId   String
+  tag       String   @db.VarChar(30)
+  createdAt DateTime @default(now())
+  
+  trade     Trade    @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  
+  @@index([tradeId])
+  @@index([tag])
+}

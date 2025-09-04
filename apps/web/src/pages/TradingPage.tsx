@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { QuickActions } from '../components/QuickActions';
 import { TradeList } from '../components/TradeList';
 import EquityDisplay from '../components/EquityDisplay';
+import { PortfolioRiskWidget } from '../components/PortfolioRiskWidget';
 import { userApi } from '../lib/api';
 
 export const TradingPage: React.FC = () => {
@@ -15,17 +16,16 @@ export const TradingPage: React.FC = () => {
   });
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header Section */}
-        <header className="mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">Trading Dashboard</h1>
-          <p className="text-lg text-gray-600">
-            Manage your trades and monitor your performance
-          </p>
-        </header>
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Header Section */}
+      <header className="mb-8">
+        <h1 className="text-4xl font-bold text-gray-900 mb-2">Trading Dashboard</h1>
+        <p className="text-lg text-gray-600">
+          Manage your trades and monitor your performance
+        </p>
+      </header>
 
-        {/* Top Section: Equity Display and Quick Actions */}
+        {/* Top Section: Dashboard Widgets */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
           {/* Equity Display - Takes up 2 columns on large screens */}
           <div className="lg:col-span-2">
@@ -41,6 +41,15 @@ export const TradingPage: React.FC = () => {
           {/* Quick Actions - Takes up 1 column on large screens */}
           <div className="lg:col-span-1">
             <QuickActions />
+          </div>
+        </div>
+
+        {/* Second Row: Portfolio Risk and Other Widgets */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+          <PortfolioRiskWidget />
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Analytics</h3>
+            <p className="text-gray-600 text-sm">Performance analytics coming soon...</p>
           </div>
         </div>
 
@@ -74,7 +83,6 @@ export const TradingPage: React.FC = () => {
           {/* Trade List */}
           <TradeList statusFilter={statusFilter} />
         </section>
-      </div>
     </div>
   );
 };

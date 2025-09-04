@@ -1,5 +1,13 @@
 import { z } from 'zod';
 
+// Export all analysis types
+export * from './analysis';
+export * from './alignment';
+
+// Import and re-export mindset types
+import { MindsetTag } from './mindset';
+export * from './mindset';
+
 // User Types
 export interface User {
   id: string;
@@ -45,8 +53,6 @@ export type UsersResponse = ApiResponse<User[]>;
 // Trade Types
 export type TradeDirection = 'LONG' | 'SHORT';
 export type TradeStatus = 'ACTIVE' | 'CLOSED';
-export type Timeframe = 'DAILY' | 'FOUR_HOUR' | 'ONE_HOUR';
-export type DivergenceType = 'BULLISH' | 'BEARISH' | 'NONE';
 
 export interface Trade {
   id: string;
@@ -64,27 +70,23 @@ export interface Trade {
   riskAmount: number;
   riskPercentage: number;
   notes: string | null;
+  // Alignment Analysis fields
+  alignmentScore: number | null;
+  alignmentLevel: string | null;
+  alignmentWarnings: string | null; // JSON string
+  alignmentConfirmations: string | null; // JSON string
   createdAt: Date;
   updatedAt: Date;
+  mindsetTags?: MindsetTag[];
 }
 
-export interface MethodAnalysis {
-  id: string;
-  tradeId: string;
-  timeframe: Timeframe;
-  indicator: string;
-  signal: string;
-  divergence: DivergenceType;
-  notes: string | null;
-  createdAt: Date;
+// Extended Trade interface with resolved alignment analysis
+export interface TradeWithAlignment extends Trade {
+  alignmentAnalysis?: import('./alignment').AlignmentAnalysis;
+  methodAnalysis?: import('./analysis').MethodAnalysis[];
 }
 
-export interface MindsetTag {
-  id: string;
-  tradeId: string;
-  tag: string;
-  createdAt: Date;
-}
+
 
 // Trade Zod Validation Schemas
 export const TradeSchema = z.object({
@@ -103,6 +105,11 @@ export const TradeSchema = z.object({
   riskAmount: z.number().min(0),
   riskPercentage: z.number().min(0),
   notes: z.string().nullable(),
+  // Alignment Analysis fields
+  alignmentScore: z.number().min(-1).max(1).nullable(),
+  alignmentLevel: z.string().nullable(),
+  alignmentWarnings: z.string().nullable(),
+  alignmentConfirmations: z.string().nullable(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -116,23 +123,7 @@ export const CreateTradeRequestSchema = z.object({
   notes: z.string().optional(),
 });
 
-export const MethodAnalysisSchema = z.object({
-  id: z.string().cuid(),
-  tradeId: z.string().cuid(),
-  timeframe: z.enum(['DAILY', 'FOUR_HOUR', 'ONE_HOUR']),
-  indicator: z.string().min(1),
-  signal: z.string().min(1),
-  divergence: z.enum(['BULLISH', 'BEARISH', 'NONE']),
-  notes: z.string().nullable(),
-  createdAt: z.date(),
-});
 
-export const MindsetTagSchema = z.object({
-  id: z.string().cuid(),
-  tradeId: z.string().cuid(),
-  tag: z.string().min(1),
-  createdAt: z.date(),
-});
 
 // Request/Response Types
 export type CreateTradeRequest = z.infer<typeof CreateTradeRequestSchema>;

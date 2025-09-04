@@ -10,7 +10,27 @@
       "Bash(npx prisma:*)",
       "Bash(npx tsx:*)",
       "Bash(npm install:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(cp:*)",
+      "Bash(NODE_ENV=development npm test -- --testNamePattern=\"should create a new trade successfully\")",
+      "Bash(NODE_ENV=development npm test -- --testNamePattern=\"Portfolio Risk API\" --detectOpenHandles)",
+      "Bash(find:*)",
+      "Bash(npm test:*)",
+      "Bash(sed:*)",
+      "Bash(npx tsc:*)",
+      "Bash(node:*)",
+      "Bash(npx jest:*)",
+      "Bash(NODE_ENV=development npm test -- --testNamePattern=\"Analytics API\" --detectOpenHandles)",
+      "Bash(NODE_ENV=development npm test -- --testNamePattern=\"Analytics API\" --detectOpenHandles --verbose)",
+      "mcp__playwright__browser_click",
+      "Bash(DATABASE_URL=\"file:./test.db\" npm test -- --testPathPattern=\"analytics\" --testNamePattern=\"should return all trades without filters\")",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_type",
+      "mcp__playwright__browser_console_messages",
+      "mcp__playwright__browser_network_requests",
+      "mcp__playwright__browser_take_screenshot",
+      "mcp__playwright__browser_press_key",
+      "mcp__playwright__browser_select_option"
     ],
     "deny": []
   }

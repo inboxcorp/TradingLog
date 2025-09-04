@@ -36,13 +36,22 @@ model Trade {
   realizedPnL      Float?
   riskAmount       Float    // Monetary risk amount
   riskPercentage   Float    // Risk as % of equity at time of entry
-  notes        String?  // Allow longer notes
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  notes            String?  // Allow longer notes
+  
+  // Alignment Analysis fields
+  alignmentScore   Float?   // Overall alignment score (-1 to 1)
+  alignmentLevel   String?  // AlignmentLevel: 'STRONG_CONFLICT' | 'WEAK_CONFLICT' | 'NEUTRAL' | 'WEAK_ALIGNMENT' | 'STRONG_ALIGNMENT'
+  alignmentWarnings String? // JSON string of warning messages
+  alignmentConfirmations String? // JSON string of confirmation messages
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
   
   user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   methodAnalysis MethodAnalysis[]
   mindsetTags    MindsetTag[]
+  tradeGrade     TradeGrade?
+  gradeHistory   GradeHistory[]
   
   // Indexes for performance
   @@index([userId, status])
@@ -50,28 +59,35 @@ model Trade {
 }
 
 model MethodAnalysis {
-  id         String   @id @default(cuid())
-  tradeId    String
-  timeframe  String   // 'DAILY' | 'FOUR_HOUR' | 'ONE_HOUR'
-  indicator  String
-  signal     String
-  divergence String   // 'BULLISH' | 'BEARISH' | 'NONE'
-  notes      String?
-  createdAt  DateTime @default(now())
+  id        String   @id @default(cuid())
+  tradeId   String
+  timeframe String   // TimeframeType: 'DAILY' | 'WEEKLY' | 'MONTHLY'
+  indicator String   // IndicatorType: 'MACD', 'RSI', etc.
+  signal    String   // SignalType: 'BUY_SIGNAL', 'SELL_SIGNAL', etc.
+  divergence String  @default("NONE") // DivergenceType: 'BULLISH' | 'BEARISH' | 'NONE'
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   
-  trade      Trade    @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  trade Trade @relation(fields: [tradeId], references: [id], onDelete: Cascade)
   
+  @@unique([tradeId, timeframe])
   @@index([tradeId])
+  @@index([indicator])
+  @@index([signal])
 }
 
 model MindsetTag {
   id        String   @id @default(cuid())
   tradeId   String
-  tag       String
+  tag       String   // MindsetTagType as string
+  intensity String   @default("MEDIUM") // IntensityLevel as string
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   
-  trade     Trade    @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  trade Trade @relation(fields: [tradeId], references: [id], onDelete: Cascade)
   
+  @@unique([tradeId, tag])
   @@index([tradeId])
   @@index([tag])
 }
@@ -90,3 +106,40 @@ model EquitySnapshot {
   @@index([userId, timestamp])
   @@index([userId, source])
 }
+
+model TradeGrade {
+  id           String   @id @default(cuid())
+  tradeId      String   @unique
+  overall      String   // GradeLevel: 'A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D', 'F'
+  score        Float    // 0-100
+  riskScore    Float    // Risk management component score
+  alignmentScore Float  // Method alignment component score
+  mindsetScore Float    // Mindset quality component score
+  executionScore Float  // Execution component score
+  explanation  String   // JSON array of explanation strings
+  recommendations String // JSON array of improvement suggestions
+  calculatedAt DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  trade Trade @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  
+  @@index([overall])
+  @@index([score])
+  @@index([calculatedAt])
+}
+
+model GradeHistory {
+  id           String   @id @default(cuid())
+  tradeId      String
+  grade        String   // GradeLevel as string
+  score        Float    // 0-100
+  reason       String   // 'TRADE_CLOSE' | 'ANALYSIS_UPDATE' | 'MINDSET_UPDATE' | 'MANUAL_RECALC'
+  calculatedAt DateTime @default(now())
+  
+  trade Trade @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  
+  @@index([tradeId, calculatedAt])
+  @@index([grade])
+  @@index([calculatedAt])
+}
+

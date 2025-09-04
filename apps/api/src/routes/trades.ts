@@ -8,7 +8,17 @@ import {
   TradesResponse,
   Trade,
   TradeDirection,
-  TradeStatus
+  TradeStatus,
+  CreateMethodAnalysisSchema,
+  UpdateMethodAnalysisSchema,
+  validateMethodAnalysis,
+  MethodAnalysis,
+  MindsetTagType,
+  IntensityLevel,
+  CreateMindsetTagRequestSchema,
+  UpdateMindsetTagRequestSchema,
+  analyzeAlignment,
+  AlignmentAnalysis
 } from '@trading-log/shared';
 import { 
   calculateTradeRisk, 
@@ -21,6 +31,7 @@ import {
   recalculateTradeRisk,
   calculateNewRiskPercentage
 } from '@trading-log/shared';
+import { calculateAndSaveGrade } from './grading';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 
 const router = express.Router();
@@ -31,25 +42,22 @@ const AdjustStopLossRequestSchema = z.object({
   stopLoss: z.number().positive(),
 });
 
+// Enhanced create trade request schema with method analysis and mindset tags
+const CreateTradeWithAnalysisRequestSchema = CreateTradeRequestSchema.extend({
+  methodAnalysis: z.array(CreateMethodAnalysisSchema).optional(),
+  mindsetTags: z.array(CreateMindsetTagRequestSchema).optional(),
+});
+
 // Helper function to format trade responses - reduces code duplication
+// Uses object spread to maintain all fields while ensuring type safety for enums
 const formatTradeResponse = (trade: any): Trade => ({
-  id: trade.id,
-  userId: trade.userId,
-  symbol: trade.symbol,
+  ...trade,
   direction: trade.direction as TradeDirection,
-  entryPrice: trade.entryPrice,
-  positionSize: trade.positionSize,
-  stopLoss: trade.stopLoss,
-  exitPrice: trade.exitPrice,
   status: trade.status as TradeStatus,
-  entryDate: trade.entryDate,
-  exitDate: trade.exitDate,
-  realizedPnL: trade.realizedPnL,
-  riskAmount: trade.riskAmount,
-  riskPercentage: trade.riskPercentage,
-  notes: trade.notes,
-  createdAt: trade.createdAt,
-  updatedAt: trade.updatedAt,
+  alignmentScore: trade.alignmentScore,
+  alignmentLevel: trade.alignmentLevel,
+  alignmentWarnings: trade.alignmentWarnings,
+  alignmentConfirmations: trade.alignmentConfirmations,
 });
 
 // GET /api/trades - Get user's trades with filtering
@@ -97,7 +105,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response<TradeRespon
     const userId = req.user!.id;
     
     // Validate request body
-    const validationResult = CreateTradeRequestSchema.safeParse(req.body);
+    const validationResult = CreateTradeWithAnalysisRequestSchema.safeParse(req.body);
     if (!validationResult.success) {
       return res.status(400).json({
         success: false,
@@ -106,7 +114,42 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response<TradeRespon
       });
     }
     
-    const { symbol, direction, entryPrice, positionSize, stopLoss, notes } = validationResult.data;
+    const { symbol, direction, entryPrice, positionSize, stopLoss, notes, methodAnalysis, mindsetTags } = validationResult.data;
+    
+    // Validate method analysis if provided
+    if (methodAnalysis && methodAnalysis.length > 0) {
+      const analysisValidation = validateMethodAnalysis(methodAnalysis);
+      if (!analysisValidation.isValid) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid method analysis',
+          message: analysisValidation.error
+        });
+      }
+    }
+    
+    // Validate mindset tags if provided
+    if (mindsetTags && mindsetTags.length > 0) {
+      // Check for duplicate tags
+      const tagTypes = mindsetTags.map(tag => tag.tag);
+      const uniqueTags = new Set(tagTypes);
+      if (tagTypes.length !== uniqueTags.size) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid mindset tags',
+          message: 'Duplicate mindset tags are not allowed'
+        });
+      }
+      
+      // Check for maximum tags (optional limit)
+      if (mindsetTags.length > 5) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid mindset tags',
+          message: 'Maximum of 5 mindset tags allowed per trade'
+        });
+      }
+    }
     
     // Calculate trade risk
     const riskAmount = calculateTradeRisk(entryPrice, stopLoss, positionSize);
@@ -143,6 +186,25 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response<TradeRespon
         throw new Error(`Total portfolio risk ($${newPortfolioRisk.toFixed(2)}) would exceed 6% limit ($${(user.totalEquity * 0.06).toFixed(2)})`);
       }
       
+      // Calculate alignment analysis if method analysis is provided
+      let alignmentAnalysis: AlignmentAnalysis | null = null;
+      if (methodAnalysis && methodAnalysis.length > 0) {
+        // Convert request data to MethodAnalysis format for alignment calculation
+        const analysisForAlignment = methodAnalysis.map((analysis, index) => ({
+          id: `temp-${index}`, // Temporary ID for calculation
+          tradeId: 'temp', // Temporary trade ID
+          timeframe: analysis.timeframe,
+          indicator: analysis.indicator,
+          signal: analysis.signal,
+          divergence: analysis.divergence,
+          notes: analysis.notes || null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })) as MethodAnalysis[];
+
+        alignmentAnalysis = analyzeAlignment(direction, analysisForAlignment);
+      }
+
       // Create the trade
       const trade = await tx.trade.create({
         data: {
@@ -157,10 +219,47 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response<TradeRespon
           riskAmount,
           riskPercentage,
           notes: notes || null,
+          // Add alignment fields
+          alignmentScore: alignmentAnalysis?.overallScore || null,
+          alignmentLevel: alignmentAnalysis?.alignmentLevel || null,
+          alignmentWarnings: alignmentAnalysis?.warnings ? JSON.stringify(alignmentAnalysis.warnings) : null,
+          alignmentConfirmations: alignmentAnalysis?.confirmations ? JSON.stringify(alignmentAnalysis.confirmations) : null,
         }
       });
       
-      return trade;
+      // Create method analysis if provided
+      if (methodAnalysis && methodAnalysis.length > 0) {
+        await tx.methodAnalysis.createMany({
+          data: methodAnalysis.map(analysis => ({
+            tradeId: trade.id,
+            timeframe: analysis.timeframe,
+            indicator: analysis.indicator,
+            signal: analysis.signal,
+            divergence: analysis.divergence,
+            notes: analysis.notes || null,
+          }))
+        });
+      }
+      
+      // Create mindset tags if provided
+      if (mindsetTags && mindsetTags.length > 0) {
+        await tx.mindsetTag.createMany({
+          data: mindsetTags.map(mindsetTag => ({
+            tradeId: trade.id,
+            tag: mindsetTag.tag,
+            intensity: mindsetTag.intensity || 'MEDIUM',
+          }))
+        });
+      }
+      
+      // Return trade with analysis
+      return await tx.trade.findUnique({
+        where: { id: trade.id },
+        include: {
+          methodAnalysis: true,
+          mindsetTags: true,
+        }
+      });
     });
     
     const formattedTrade = formatTradeResponse(result);
@@ -303,6 +402,14 @@ router.post('/:tradeId/close', requireAuth, async (req: AuthRequest, res: Respon
       return updatedTrade;
     });
     
+    // Calculate and save trade grade after closing
+    try {
+      await calculateAndSaveGrade(tradeId, 'TRADE_CLOSE');
+    } catch (gradingError) {
+      // Log error but don't fail the trade closure
+      console.error('Error calculating grade for closed trade:', gradingError);
+    }
+    
     const formattedTrade = formatTradeResponse(result);
     
     res.json({
@@ -398,6 +505,10 @@ router.patch('/:tradeId', requireAuth, async (req: AuthRequest, res: Response<Tr
         riskAmount: trade.riskAmount,
         riskPercentage: trade.riskPercentage,
         notes: trade.notes,
+        alignmentScore: trade.alignmentScore,
+        alignmentLevel: trade.alignmentLevel,
+        alignmentWarnings: trade.alignmentWarnings,
+        alignmentConfirmations: trade.alignmentConfirmations,
         createdAt: trade.createdAt,
         updatedAt: trade.updatedAt,
       };
@@ -470,6 +581,299 @@ router.patch('/:tradeId', requireAuth, async (req: AuthRequest, res: Response<Tr
     res.status(500).json({
       success: false,
       error: 'Failed to adjust stop-loss',
+      message: process.env.NODE_ENV === 'development' ? error instanceof Error ? error.message : String(error) : undefined
+    });
+  }
+});
+
+// PATCH /api/trades/:tradeId/analysis - Update method analysis for a trade
+router.patch('/:tradeId/analysis', requireAuth, async (req: AuthRequest, res: Response<TradeResponse>) => {
+  try {
+    const userId = req.user!.id;
+    const { tradeId } = req.params;
+    
+    // Validate request body - expecting array of analysis updates
+    const analysisArraySchema = z.array(CreateMethodAnalysisSchema);
+    const validationResult = analysisArraySchema.safeParse(req.body);
+    
+    if (!validationResult.success) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid request data',
+        message: validationResult.error.errors.map((e: any) => e.message).join(', ')
+      });
+    }
+    
+    const analysisUpdates = validationResult.data;
+    
+    // Validate method analysis
+    const analysisValidation = validateMethodAnalysis(analysisUpdates);
+    if (!analysisValidation.isValid) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid method analysis',
+        message: analysisValidation.error
+      });
+    }
+    
+    // Use database transaction for analysis update
+    const result = await prisma.$transaction(async (tx) => {
+      // Verify trade exists and belongs to user
+      const trade = await tx.trade.findFirst({
+        where: { 
+          id: tradeId,
+          userId
+        }
+      });
+      
+      if (!trade) {
+        throw new Error('Trade not found');
+      }
+      
+      // Delete existing analysis for this trade
+      await tx.methodAnalysis.deleteMany({
+        where: { tradeId }
+      });
+      
+      // Create new analysis records and recalculate alignment
+      if (analysisUpdates.length > 0) {
+        await tx.methodAnalysis.createMany({
+          data: analysisUpdates.map(analysis => ({
+            tradeId,
+            timeframe: analysis.timeframe,
+            indicator: analysis.indicator,
+            signal: analysis.signal,
+            divergence: analysis.divergence,
+            notes: analysis.notes || null,
+          }))
+        });
+
+        // Recalculate alignment analysis
+        const analysisForAlignment = analysisUpdates.map((analysis, index) => ({
+          id: `temp-${index}`, // Temporary ID for calculation
+          tradeId: tradeId, // Use actual trade ID
+          timeframe: analysis.timeframe,
+          indicator: analysis.indicator,
+          signal: analysis.signal,
+          divergence: analysis.divergence,
+          notes: analysis.notes || null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })) as MethodAnalysis[];
+
+        const alignmentAnalysis = analyzeAlignment(trade.direction as TradeDirection, analysisForAlignment);
+
+        // Update trade with new alignment analysis
+        await tx.trade.update({
+          where: { id: tradeId },
+          data: {
+            alignmentScore: alignmentAnalysis.overallScore,
+            alignmentLevel: alignmentAnalysis.alignmentLevel,
+            alignmentWarnings: JSON.stringify(alignmentAnalysis.warnings),
+            alignmentConfirmations: JSON.stringify(alignmentAnalysis.confirmations),
+          }
+        });
+      } else {
+        // Clear alignment analysis if no method analysis
+        await tx.trade.update({
+          where: { id: tradeId },
+          data: {
+            alignmentScore: null,
+            alignmentLevel: null,
+            alignmentWarnings: null,
+            alignmentConfirmations: null,
+          }
+        });
+      }
+      
+      // Return updated trade with analysis
+      return await tx.trade.findUnique({
+        where: { id: tradeId },
+        include: {
+          methodAnalysis: true,
+          mindsetTags: true,
+        }
+      });
+    });
+    
+    if (!result) {
+      return res.status(404).json({
+        success: false,
+        error: 'Trade not found'
+      });
+    }
+    
+    // Recalculate trade grade after analysis update
+    try {
+      await calculateAndSaveGrade(tradeId, 'ANALYSIS_UPDATE');
+    } catch (gradingError) {
+      // Log error but don't fail the analysis update
+      console.error('Error recalculating grade after analysis update:', gradingError);
+    }
+    
+    const formattedTrade = formatTradeResponse(result);
+    
+    res.json({
+      success: true,
+      data: formattedTrade
+    });
+    
+  } catch (error) {
+    console.error('Error updating method analysis:', error);
+    
+    // Handle specific error cases
+    if (error instanceof Error && error.message.includes('not found')) {
+      return res.status(404).json({
+        success: false,
+        error: 'Trade not found',
+        message: error.message
+      });
+    }
+    
+    // Handle Prisma validation errors
+    if (error instanceof Error && error.name === 'PrismaClientValidationError') {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid data format',
+        message: 'The provided data does not match the expected format'
+      });
+    }
+    
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update method analysis',
+      message: process.env.NODE_ENV === 'development' ? error instanceof Error ? error.message : String(error) : undefined
+    });
+  }
+});
+
+// PATCH /api/trades/:tradeId/mindset - Update mindset tags for a trade
+router.patch('/:tradeId/mindset', requireAuth, async (req: AuthRequest, res: Response<TradeResponse>) => {
+  try {
+    const userId = req.user!.id;
+    const { tradeId } = req.params;
+    
+    // Validate request body
+    const validationResult = UpdateMindsetTagRequestSchema.safeParse(req.body);
+    if (!validationResult.success) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid request data',
+        message: validationResult.error.errors.map((e: any) => e.message).join(', ')
+      });
+    }
+    
+    const { tags: mindsetTags } = validationResult.data;
+    
+    // Validate mindset tags
+    if (mindsetTags.length > 0) {
+      // Check for duplicate tags
+      const tagTypes = mindsetTags.map(tag => tag.tag);
+      const uniqueTags = new Set(tagTypes);
+      if (tagTypes.length !== uniqueTags.size) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid mindset tags',
+          message: 'Duplicate mindset tags are not allowed'
+        });
+      }
+      
+      // Check for maximum tags
+      if (mindsetTags.length > 5) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid mindset tags',
+          message: 'Maximum of 5 mindset tags allowed per trade'
+        });
+      }
+    }
+    
+    // Use database transaction for mindset tag update
+    const result = await prisma.$transaction(async (tx) => {
+      // Verify trade exists and belongs to user
+      const trade = await tx.trade.findFirst({
+        where: { 
+          id: tradeId,
+          userId
+        }
+      });
+      
+      if (!trade) {
+        throw new Error('Trade not found');
+      }
+      
+      // Delete existing mindset tags for this trade
+      await tx.mindsetTag.deleteMany({
+        where: { tradeId }
+      });
+      
+      // Create new mindset tag records
+      if (mindsetTags.length > 0) {
+        await tx.mindsetTag.createMany({
+          data: mindsetTags.map(mindsetTag => ({
+            tradeId,
+            tag: mindsetTag.tag,
+            intensity: mindsetTag.intensity,
+          }))
+        });
+      }
+      
+      // Return updated trade with mindset tags
+      return await tx.trade.findUnique({
+        where: { id: tradeId },
+        include: {
+          methodAnalysis: true,
+          mindsetTags: true,
+        }
+      });
+    });
+    
+    if (!result) {
+      return res.status(404).json({
+        success: false,
+        error: 'Trade not found'
+      });
+    }
+    
+    // Recalculate trade grade after mindset update
+    try {
+      await calculateAndSaveGrade(tradeId, 'MINDSET_UPDATE');
+    } catch (gradingError) {
+      // Log error but don't fail the mindset update
+      console.error('Error recalculating grade after mindset update:', gradingError);
+    }
+    
+    const formattedTrade = formatTradeResponse(result);
+    
+    res.json({
+      success: true,
+      data: formattedTrade
+    });
+    
+  } catch (error) {
+    console.error('Error updating mindset tags:', error);
+    
+    // Handle specific error cases
+    if (error instanceof Error && error.message.includes('not found')) {
+      return res.status(404).json({
+        success: false,
+        error: 'Trade not found',
+        message: error.message
+      });
+    }
+    
+    // Handle Prisma validation errors
+    if (error instanceof Error && error.name === 'PrismaClientValidationError') {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid data format',
+        message: 'The provided data does not match the expected format'
+      });
+    }
+    
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update mindset tags',
       message: process.env.NODE_ENV === 'development' ? error instanceof Error ? error.message : String(error) : undefined
     });
   }

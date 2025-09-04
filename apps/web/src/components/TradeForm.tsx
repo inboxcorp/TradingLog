@@ -5,13 +5,21 @@ import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { 
   CreateTradeRequestSchema, 
   TradeDirection,
+  CreateMethodAnalysisRequest,
+  MindsetTagType,
+  IntensityLevel,
   calculateTradeRisk,
   calculatePortfolioRisk,
   exceedsIndividualRiskLimit,
   exceedsPortfolioRiskLimit,
-  formatCurrency
+  formatCurrency,
+  AlignmentAnalysis,
+  MethodAnalysis
 } from '@trading-log/shared';
-import { tradeApi, userApi } from '../lib/api';
+import { tradeApi, userApi, alignmentApi } from '../lib/api';
+import MethodAnalysisForm from './MethodAnalysisForm';
+import MindsetTagSelector from './MindsetTagSelector';
+import AlignmentFeedback from './AlignmentFeedback';
 
 interface TradeFormProps {
   isOpen: boolean;
@@ -25,11 +33,17 @@ interface TradeFormData {
   positionSize: number;
   stopLoss: number;
   notes?: string;
+  methodAnalysis?: CreateMethodAnalysisRequest[];
+  mindsetTags?: Array<{ tag: MindsetTagType; intensity: IntensityLevel }>;
 }
 
 export const TradeForm: React.FC<TradeFormProps> = ({ isOpen, onClose }) => {
   const [riskAmount, setRiskAmount] = useState<number>(0);
   const [riskWarning, setRiskWarning] = useState<string>('');
+  const [methodAnalysis, setMethodAnalysis] = useState<CreateMethodAnalysisRequest[]>([]);
+  const [mindsetTags, setMindsetTags] = useState<Array<{ tag: MindsetTagType; intensity: IntensityLevel }>>([]);
+  const [alignmentAnalysis, setAlignmentAnalysis] = useState<AlignmentAnalysis | null>(null);
+  const [ignoreAlignmentWarning, setIgnoreAlignmentWarning] = useState<boolean>(false);
   const queryClient = useQueryClient();
 
   // Get user data for risk calculations
@@ -57,9 +71,9 @@ export const TradeForm: React.FC<TradeFormProps> = ({ isOpen, onClose }) => {
     },
   });
 
-  // Watch form values for real-time risk calculation
-  const watchedValues = watch(['entryPrice', 'positionSize', 'stopLoss']);
-  const [entryPrice, positionSize, stopLoss] = watchedValues;
+  // Watch form values for real-time risk calculation and alignment analysis
+  const watchedValues = watch(['entryPrice', 'positionSize', 'stopLoss', 'direction']);
+  const [entryPrice, positionSize, stopLoss, direction] = watchedValues;
 
   // Real-time risk calculation
   useEffect(() => {
@@ -93,6 +107,40 @@ export const TradeForm: React.FC<TradeFormProps> = ({ isOpen, onClose }) => {
     }
   }, [entryPrice, positionSize, stopLoss, user, activeTrades]);
 
+  // Real-time alignment analysis
+  useEffect(() => {
+    const performAlignmentAnalysis = async () => {
+      if (direction && methodAnalysis.length > 0) {
+        try {
+          // Convert form data to MethodAnalysis format for alignment calculation
+          const analysisForAlignment = methodAnalysis.map((analysis, index) => ({
+            id: `temp-${index}`, // Temporary ID for calculation
+            tradeId: 'temp', // Temporary trade ID
+            timeframe: analysis.timeframe,
+            indicator: analysis.indicator,
+            signal: analysis.signal,
+            divergence: analysis.divergence,
+            notes: analysis.notes || null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          })) as MethodAnalysis[];
+
+          const alignment = await alignmentApi.analyzeAlignment(direction, analysisForAlignment);
+          setAlignmentAnalysis(alignment);
+        } catch (error) {
+          console.error('Error analyzing alignment:', error);
+          setAlignmentAnalysis(null);
+        }
+      } else {
+        setAlignmentAnalysis(null);
+      }
+    };
+
+    // Debounce alignment analysis to avoid excessive API calls
+    const timeoutId = setTimeout(performAlignmentAnalysis, 500);
+    return () => clearTimeout(timeoutId);
+  }, [direction, methodAnalysis]);
+
   // Create trade mutation
   const createTradeMutation = useMutation({
     mutationFn: tradeApi.createTrade,
@@ -108,7 +156,13 @@ export const TradeForm: React.FC<TradeFormProps> = ({ isOpen, onClose }) => {
 
   const onSubmit = async (data: TradeFormData) => {
     try {
-      await createTradeMutation.mutateAsync(data);
+      // Include method analysis and mindset tags in the submission
+      const tradeData = {
+        ...data,
+        methodAnalysis: methodAnalysis.length > 0 ? methodAnalysis : undefined,
+        mindsetTags: mindsetTags.length > 0 ? mindsetTags : undefined
+      };
+      await createTradeMutation.mutateAsync(tradeData);
     } catch (error) {
       // Error handling is done in the mutation
     }
@@ -118,8 +172,21 @@ export const TradeForm: React.FC<TradeFormProps> = ({ isOpen, onClose }) => {
     reset();
     setRiskAmount(0);
     setRiskWarning('');
+    setMethodAnalysis([]);
+    setMindsetTags([]);
+    setAlignmentAnalysis(null);
+    setIgnoreAlignmentWarning(false);
     onClose();
   };
+
+  const handleIgnoreAlignmentWarning = () => {
+    setIgnoreAlignmentWarning(true);
+  };
+
+  // Check if alignment blocks submission
+  const hasBlockingAlignmentConflict = alignmentAnalysis && 
+    alignmentAnalysis.alignmentLevel === 'STRONG_CONFLICT' && 
+    !ignoreAlignmentWarning;
 
   if (!isOpen) return null;
 
@@ -244,6 +311,42 @@ export const TradeForm: React.FC<TradeFormProps> = ({ isOpen, onClose }) => {
             />
           </div>
 
+          {/* Method Analysis */}
+          <div className="border-t border-gray-200 pt-6">
+            <MethodAnalysisForm
+              onAnalysisChange={setMethodAnalysis}
+              disabled={isSubmitting}
+            />
+          </div>
+
+          {/* Mindset Tags */}
+          <div className="border-t border-gray-200 pt-6">
+            <MindsetTagSelector
+              selectedTags={mindsetTags}
+              onTagsChange={setMindsetTags}
+              disabled={isSubmitting}
+              maxSelections={5}
+            />
+          </div>
+
+          {/* Alignment Feedback */}
+          {alignmentAnalysis && (
+            <div className="border-t border-gray-200 pt-6">
+              <div className="mb-4">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Signal Alignment Analysis</h3>
+                <p className="text-sm text-gray-600">
+                  Review how your technical signals align with your intended trade direction
+                </p>
+              </div>
+              <AlignmentFeedback
+                alignment={alignmentAnalysis}
+                onIgnoreWarning={handleIgnoreAlignmentWarning}
+                showRecommendations={true}
+                isSubmitting={isSubmitting}
+              />
+            </div>
+          )}
+
           {/* Risk Display */}
           {riskAmount > 0 && (
             <div className="bg-gray-50 p-3 rounded-md">
@@ -316,9 +419,9 @@ export const TradeForm: React.FC<TradeFormProps> = ({ isOpen, onClose }) => {
             <button
               type="submit"
               form="trade-form"
-              disabled={isSubmitting || !!riskWarning}
+              disabled={isSubmitting || !!riskWarning || !!hasBlockingAlignmentConflict}
               className={`w-full sm:w-auto px-6 py-3 text-base font-medium text-white rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${
-                isSubmitting || riskWarning
+                isSubmitting || riskWarning || hasBlockingAlignmentConflict
                   ? 'bg-gray-400 cursor-not-allowed'
                   : 'bg-blue-600 hover:bg-blue-700'
               }`}

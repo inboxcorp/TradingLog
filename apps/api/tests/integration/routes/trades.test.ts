@@ -116,6 +116,10 @@ describe('Trades API', () => {
           entryDate: new Date(),
           riskAmount: 1500,
           riskPercentage: 1.5,
+          alignmentScore: null,
+          alignmentLevel: null,
+          alignmentWarnings: null,
+          alignmentConfirmations: null
         },
       });
 
@@ -132,6 +136,10 @@ describe('Trades API', () => {
           entryDate: new Date(),
           riskAmount: 1000,
           riskPercentage: 1.0,
+          alignmentScore: null,
+          alignmentLevel: null,
+          alignmentWarnings: null,
+          alignmentConfirmations: null
         },
       });
 
@@ -209,6 +217,10 @@ describe('Trades API', () => {
             entryDate: new Date(),
             riskAmount: 500,
             riskPercentage: 0.5,
+            alignmentScore: null,
+            alignmentLevel: null,
+            alignmentWarnings: null,
+            alignmentConfirmations: null
           },
           {
             userId: testUserId,
@@ -224,6 +236,10 @@ describe('Trades API', () => {
             realizedPnL: 500,
             riskAmount: 500,
             riskPercentage: 0.5,
+            alignmentScore: null,
+            alignmentLevel: null,
+            alignmentWarnings: null,
+            alignmentConfirmations: null
           },
         ],
       });
@@ -291,6 +307,10 @@ describe('Trades API', () => {
           entryDate: new Date(),
           riskAmount: 50,
           riskPercentage: 0.05,
+          alignmentScore: null,
+          alignmentLevel: null,
+          alignmentWarnings: null,
+          alignmentConfirmations: null
         },
       });
 
@@ -327,6 +347,10 @@ describe('Trades API', () => {
           entryDate: new Date(),
           riskAmount: 500,
           riskPercentage: 0.5,
+          alignmentScore: null,
+          alignmentLevel: null,
+          alignmentWarnings: null,
+          alignmentConfirmations: null
         },
       });
       activeTradeId = activeTrade.id;
@@ -347,6 +371,10 @@ describe('Trades API', () => {
           realizedPnL: 1000,
           riskAmount: 500,
           riskPercentage: 0.5,
+          alignmentScore: null,
+          alignmentLevel: null,
+          alignmentWarnings: null,
+          alignmentConfirmations: null
         },
       });
       closedTradeId = closedTrade.id;
@@ -427,6 +455,10 @@ describe('Trades API', () => {
           entryDate: new Date(),
           riskAmount: 250,
           riskPercentage: 0.25,
+          alignmentScore: null,
+          alignmentLevel: null,
+          alignmentWarnings: null,
+          alignmentConfirmations: null
         },
       });
 
@@ -456,6 +488,10 @@ describe('Trades API', () => {
           entryDate: new Date(),
           riskAmount: 250,
           riskPercentage: 0.25,
+          alignmentScore: null,
+          alignmentLevel: null,
+          alignmentWarnings: null,
+          alignmentConfirmations: null
         },
       });
 
@@ -504,6 +540,10 @@ describe('Trades API', () => {
           entryDate: new Date(),
           riskAmount: 45.288,
           riskPercentage: 0.045,
+          alignmentScore: null,
+          alignmentLevel: null,
+          alignmentWarnings: null,
+          alignmentConfirmations: null
         },
       });
 
@@ -576,6 +616,10 @@ describe('Trades API', () => {
           entryDate: new Date(),
           riskAmount: 50,
           riskPercentage: 0.05,
+          alignmentScore: null,
+          alignmentLevel: null,
+          alignmentWarnings: null,
+          alignmentConfirmations: null
         },
       });
 
@@ -646,6 +690,10 @@ describe('Trades API', () => {
           entryDate: new Date(),
           riskAmount: 50,
           riskPercentage: 0.05,
+          alignmentScore: null,
+          alignmentLevel: null,
+          alignmentWarnings: null,
+          alignmentConfirmations: null
         },
       });
 

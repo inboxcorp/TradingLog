@@ -1,13 +1,71 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { formatCurrency, Trade } from '@trading-log/shared';
-import { tradeApi } from '../lib/api';
+import { formatCurrency, Trade, AlignmentAnalysis } from '@trading-log/shared';
+import { tradeApi, gradingApi } from '../lib/api';
 import { CloseTradeModal } from './CloseTradeModal';
 import { AdjustStopModal } from './AdjustStopModal';
+import MindsetTagDisplay from './MindsetTagDisplay';
+import AlignmentIndicator from './AlignmentIndicator';
+import { GradeBadge } from './TradeGrade';
 
 interface TradeListProps {
   statusFilter?: 'ACTIVE' | 'CLOSED' | 'ALL';
 }
+
+interface TradeGradeCellProps {
+  tradeId: string;
+  tradeStatus: string;
+}
+
+const TradeGradeCell: React.FC<TradeGradeCellProps> = ({ tradeId, tradeStatus }) => {
+  const { data: grade, isLoading, error } = useQuery({
+    queryKey: ['trade-grade', tradeId],
+    queryFn: () => gradingApi.getTradeGrade(tradeId),
+    enabled: tradeStatus === 'CLOSED', // Only fetch grades for closed trades
+    retry: false, // Don't retry if grade doesn't exist
+  });
+
+  if (tradeStatus === 'ACTIVE') {
+    return <span className="text-xs text-gray-400">Pending</span>;
+  }
+
+  if (isLoading) {
+    return (
+      <div className="animate-pulse">
+        <div className="h-6 w-6 bg-gray-200 rounded-full"></div>
+      </div>
+    );
+  }
+
+  if (error || !grade) {
+    return (
+      <button
+        onClick={() => {
+          // Trigger grade calculation
+          gradingApi.calculateGrade(tradeId, 'MANUAL_RECALC')
+            .then(() => {
+              // Refresh the query
+              window.location.reload(); // Simple refresh for now
+            })
+            .catch(console.error);
+        }}
+        className="text-xs text-blue-600 hover:text-blue-800 underline"
+        title="Calculate grade for this trade"
+      >
+        Calculate
+      </button>
+    );
+  }
+
+  return (
+    <GradeBadge 
+      grade={grade.overall} 
+      score={grade.score}
+      size="sm" 
+      showScore={false}
+    />
+  );
+};
 
 export const TradeList: React.FC<TradeListProps> = ({ statusFilter = 'ALL' }) => {
   const [tradeToClose, setTradeToClose] = useState<Trade | null>(null);
@@ -44,7 +102,7 @@ export const TradeList: React.FC<TradeListProps> = ({ statusFilter = 'ALL' }) =>
     setTradeToAdjust(null);
   };
 
-  const handleAdjustSuccess = (updatedTrade: Trade) => {
+  const handleAdjustSuccess = (_updatedTrade: Trade) => {
     // Modal will close automatically via handleAdjustModalClose
     // QueryClient will invalidate and refetch trades automatically
   };
@@ -140,6 +198,29 @@ export const TradeList: React.FC<TradeListProps> = ({ statusFilter = 'ALL' }) =>
     );
   };
 
+  // Parse alignment data from trade record
+  const parseAlignmentAnalysis = (trade: Trade): AlignmentAnalysis | null => {
+    if (!trade.alignmentScore || !trade.alignmentLevel) {
+      return null;
+    }
+
+    try {
+      const warnings = trade.alignmentWarnings ? JSON.parse(trade.alignmentWarnings) : [];
+      const confirmations = trade.alignmentConfirmations ? JSON.parse(trade.alignmentConfirmations) : [];
+
+      return {
+        overallScore: trade.alignmentScore,
+        alignmentLevel: trade.alignmentLevel as any,
+        warnings,
+        confirmations,
+        timeframeBreakdown: [] // Not stored in trade record, would need separate query
+      };
+    } catch (error) {
+      console.error('Error parsing alignment data:', error);
+      return null;
+    }
+  };
+
   return (
     <div className="bg-white shadow-sm overflow-hidden sm:rounded-md">
       <div className="px-4 py-4 sm:px-6">
@@ -183,6 +264,15 @@ export const TradeList: React.FC<TradeListProps> = ({ statusFilter = 'ALL' }) =>
                 Entry Date
               </th>
               <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                Alignment
+              </th>
+              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                Mindset
+              </th>
+              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                Grade
+              </th>
+              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                 P/L
               </th>
               <th className="px-6 py-4 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">
@@ -213,6 +303,33 @@ export const TradeList: React.FC<TradeListProps> = ({ statusFilter = 'ALL' }) =>
                 </td>
                 <td className="px-6 py-5 whitespace-nowrap">
                   <span className="text-sm text-gray-600">{formatDate(trade.entryDate)}</span>
+                </td>
+                <td className="px-6 py-5 whitespace-nowrap">
+                  <div className="max-w-40">
+                    {(() => {
+                      const alignmentAnalysis = parseAlignmentAnalysis(trade);
+                      return alignmentAnalysis ? (
+                        <AlignmentIndicator 
+                          alignmentAnalysis={alignmentAnalysis} 
+                          compact={true} 
+                        />
+                      ) : (
+                        <span className="text-xs text-gray-400">No analysis</span>
+                      );
+                    })()}
+                  </div>
+                </td>
+                <td className="px-6 py-5">
+                  <div className="max-w-32">
+                    <MindsetTagDisplay 
+                      tags={trade.mindsetTags || []} 
+                      compact={true} 
+                      showIntensity={false}
+                    />
+                  </div>
+                </td>
+                <td className="px-6 py-5 whitespace-nowrap">
+                  <TradeGradeCell tradeId={trade.id} tradeStatus={trade.status} />
                 </td>
                 <td className="px-6 py-5 whitespace-nowrap">
                   {trade.realizedPnL !== null && trade.realizedPnL !== undefined ? (
@@ -298,6 +415,36 @@ export const TradeList: React.FC<TradeListProps> = ({ statusFilter = 'ALL' }) =>
               {trade.notes && (
                 <div className="mt-2">
                   <p className="text-sm text-gray-600 italic">"{trade.notes}"</p>
+                </div>
+              )}
+              
+              {/* Alignment Analysis */}
+              {(() => {
+                const alignmentAnalysis = parseAlignmentAnalysis(trade);
+                return alignmentAnalysis && (
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <div className="mb-2">
+                      <span className="text-sm font-medium text-gray-600">Signal Alignment:</span>
+                    </div>
+                    <AlignmentIndicator 
+                      alignmentAnalysis={alignmentAnalysis} 
+                      compact={true} 
+                    />
+                  </div>
+                );
+              })()}
+              
+              {/* Mindset Tags */}
+              {trade.mindsetTags && trade.mindsetTags.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-gray-100">
+                  <div className="mb-2">
+                    <span className="text-sm font-medium text-gray-600">Mindset Tags:</span>
+                  </div>
+                  <MindsetTagDisplay 
+                    tags={trade.mindsetTags || []} 
+                    compact={true} 
+                    showIntensity={true}
+                  />
                 </div>
               )}
               

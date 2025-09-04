@@ -41,6 +41,10 @@ describe('Adjust Stop-Loss API', () => {
         entryDate: new Date(),
         riskAmount: 500, // (150 - 145) * 100
         riskPercentage: 0.5, // 500/100000 * 100
+        alignmentScore: null,
+        alignmentLevel: null,
+        alignmentWarnings: null,
+        alignmentConfirmations: null
       }
     });
     testTradeId = trade.id;

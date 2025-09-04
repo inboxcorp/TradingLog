@@ -23,9 +23,8 @@ describe('Risk Calculations', () => {
       expect(risk).toBeCloseTo(45.288, 3); // (100.123 - 99.987) * 333
     });
 
-    it('should handle zero position size', () => {
-      const risk = calculateTradeRisk(100, 95, 0);
-      expect(risk).toBe(0);
+    it('should throw error for zero position size', () => {
+      expect(() => calculateTradeRisk(100, 95, 0)).toThrow('Position size must be a positive number');
     });
 
     it('should handle same entry and stop prices', () => {
@@ -169,10 +168,8 @@ describe('Risk Calculations', () => {
   });
 
   describe('Edge Cases and Error Handling', () => {
-    it('should handle negative position sizes gracefully', () => {
-      // While this shouldn't happen in normal usage, test defensive behavior
-      const risk = calculateTradeRisk(100, 95, -100);
-      expect(risk).toBe(500); // Should take absolute value
+    it('should throw error for negative position sizes', () => {
+      expect(() => calculateTradeRisk(100, 95, -100)).toThrow('Position size must be a positive number');
     });
 
     it('should handle very large numbers without overflow', () => {

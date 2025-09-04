@@ -3,8 +3,11 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
-import usersRouter from './routes/users.js';
-import tradesRouter from './routes/trades.js';
+import usersRouter from './routes/users';
+import tradesRouter from './routes/trades';
+import alignmentRouter from './routes/alignment';
+import analyticsRouter from './routes/analytics';
+import gradingRouter from './routes/grading';
 
 // Load environment variables
 dotenv.config();
@@ -38,6 +41,9 @@ app.get('/health', (req, res) => {
 // API routes
 app.use('/api/user', usersRouter);
 app.use('/api/trades', tradesRouter);
+app.use('/api/alignment', alignmentRouter);
+app.use('/api/analytics', analyticsRouter);
+app.use('/api/grading', gradingRouter);
 
 // 404 handler
 app.use('*', (req, res) => {
@@ -56,11 +62,13 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
   });
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`🚀 Trading Log API server running on port ${PORT}`);
-  console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🔗 Health check: http://localhost:${PORT}/health`);
-});
+// Start server only if not in test environment
+if (process.env.NODE_ENV !== 'test' && require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`🚀 Trading Log API server running on port ${PORT}`);
+    console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`🔗 Health check: http://localhost:${PORT}/health`);
+  });
+}
 
 export default app;

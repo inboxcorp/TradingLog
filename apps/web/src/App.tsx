@@ -1,8 +1,11 @@
 import React from 'react';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, AuthGuard } from './components/AuthWrapper';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { Layout } from './components/Layout';
 import { TradingPage } from './pages/TradingPage';
+import AnalyticsScreen from './pages/AnalyticsScreen';
 
 // Create a client
 const queryClient = new QueryClient({
@@ -19,11 +22,16 @@ const App: React.FC = () => {
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <div className="app">
+          <BrowserRouter>
             <AuthGuard>
-              <TradingPage />
+              <Routes>
+                <Route path="/" element={<Layout />}>
+                  <Route index element={<TradingPage />} />
+                  <Route path="analytics" element={<AnalyticsScreen />} />
+                </Route>
+              </Routes>
             </AuthGuard>
-          </div>
+          </BrowserRouter>
         </AuthProvider>
       </QueryClientProvider>
     </ErrorBoundary>

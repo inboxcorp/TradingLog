@@ -1,5 +1,5 @@
 import { describe, it, expect } from '@jest/globals';
-import { updateEquity, validateEquityValue, formatCurrency } from '@trading-log/shared';
+import { updateEquity, validateEquityValue, formatCurrency, calculateRealizedPnL } from '@trading-log/shared';
 import Decimal from 'decimal.js';
 
 describe('Financial Calculations', () => {
@@ -93,6 +93,76 @@ describe('Financial Calculations', () => {
 
     it('should handle negative amounts', () => {
       expect(formatCurrency(-100)).toBe('-$100.00');
+    });
+  });
+
+  describe('calculateRealizedPnL', () => {
+    describe('LONG trades', () => {
+      it('should calculate profit correctly for LONG trades', () => {
+        const pnl = calculateRealizedPnL(100, 110, 10, 'LONG');
+        expect(pnl).toBe(100); // (110 - 100) * 10 = 100
+      });
+
+      it('should calculate loss correctly for LONG trades', () => {
+        const pnl = calculateRealizedPnL(100, 90, 10, 'LONG');
+        expect(pnl).toBe(-100); // (90 - 100) * 10 = -100
+      });
+
+      it('should calculate zero P/L for break-even LONG trades', () => {
+        const pnl = calculateRealizedPnL(100, 100, 10, 'LONG');
+        expect(pnl).toBe(0); // (100 - 100) * 10 = 0
+      });
+    });
+
+    describe('SHORT trades', () => {
+      it('should calculate profit correctly for SHORT trades', () => {
+        const pnl = calculateRealizedPnL(100, 90, 10, 'SHORT');
+        expect(pnl).toBe(100); // (100 - 90) * 10 = 100
+      });
+
+      it('should calculate loss correctly for SHORT trades', () => {
+        const pnl = calculateRealizedPnL(100, 110, 10, 'SHORT');
+        expect(pnl).toBe(-100); // (100 - 110) * 10 = -100
+      });
+
+      it('should calculate zero P/L for break-even SHORT trades', () => {
+        const pnl = calculateRealizedPnL(100, 100, 10, 'SHORT');
+        expect(pnl).toBe(0); // (100 - 100) * 10 = 0
+      });
+    });
+
+    describe('decimal precision', () => {
+      it('should handle decimal prices with precision for LONG trades', () => {
+        const pnl = calculateRealizedPnL(100.50, 101.75, 100, 'LONG');
+        expect(pnl).toBe(125); // (101.75 - 100.50) * 100 = 125
+      });
+
+      it('should handle decimal prices with precision for SHORT trades', () => {
+        const pnl = calculateRealizedPnL(100.50, 99.25, 100, 'SHORT');
+        expect(pnl).toBe(125); // (100.50 - 99.25) * 100 = 125
+      });
+
+      it('should handle small decimal differences', () => {
+        const pnl = calculateRealizedPnL(10.01, 10.03, 1000, 'LONG');
+        expect(pnl).toBe(20); // (10.03 - 10.01) * 1000 = 20
+      });
+    });
+
+    describe('edge cases', () => {
+      it('should handle fractional shares', () => {
+        const pnl = calculateRealizedPnL(100, 110, 1.5, 'LONG');
+        expect(pnl).toBe(15); // (110 - 100) * 1.5 = 15
+      });
+
+      it('should handle large position sizes', () => {
+        const pnl = calculateRealizedPnL(100, 101, 10000, 'LONG');
+        expect(pnl).toBe(10000); // (101 - 100) * 10000 = 10000
+      });
+
+      it('should handle very small price differences', () => {
+        const pnl = calculateRealizedPnL(100.0001, 100.0002, 1000000, 'LONG');
+        expect(pnl).toBe(100); // (100.0002 - 100.0001) * 1000000 = 100
+      });
     });
   });
 });
